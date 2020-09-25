@@ -30,7 +30,7 @@ puzzle_image_re_list = (
   re.compile(r'https://i\.guim\.co\.uk/img/static/sys-images/Guardian/Pix/pictures/'
              '\d+/\d+/\d+/[-/\w]+.jpeg\?.*'),
 )
-extn_re = re.compile(r'(\.[^\.\?]*)(\?|\Z)')
+extn_re = re.compile(r'.*(\.\w+)(\?|\Z)')
 
 cache_dir = os.path.join(base_dir, "cache")
 
