@@ -1,4 +1,5 @@
 #! /usr/bin/python3
+import hashlib
 import html.parser
 import os
 import os.path
@@ -17,22 +18,43 @@ ignore_re_list = (
   re.compile(r'series/killer-sudoku\+series/sudoku\?page=\d+'),
   re.compile(r'series/killer-sudoku\+series/sudoku'),
 )
-puzzle_page_re_0 = re.compile(r'\d+/\w+/\d+/observer-killer-sudoku')
-puzzle_page_re_1 = re.compile(r'\d+/\w+/\d+/sudoku-killer-\d+')
+puzzle_page_re_list = (
+  re.compile(r'\d+/\w+/\d+/observer-killer-sudoku'),
+  re.compile(r'\d+/\w+/\d+/sudoku-killer-\d+'),
+)
+image_ignore_re_list = (
+  re.compile(r'//phar.gu-web.net/.*'),
+  re.compile(r'https://sb.scorecardresearch.com/.*'),
+)
+puzzle_image_re_list = (
+  re.compile(r'https://i\.guim\.co\.uk/img/static/sys-images/Guardian/Pix/pictures/'
+             '\d+/\d+/\d+/[-/\w]+.jpeg\?.*'),
+)
+extn_re = re.compile(r'(\.[^\.\?]*)(\?|\Z)')
 
 cache_dir = os.path.join(base_dir, "cache")
 
 chunk_size = 4096
 
 def url_cache_path(url):
-  filename = special_char_re.sub("_", url)
-  return os.path.join(cache_dir, filename)
+  m = extn_re.match(url)
+  extn = ""
+  if m:
+    extn = m.group(1)
+
+  h = hashlib.sha256()
+  h.update(url.encode("UTF-8"))
+  dig = h.digest()
+  return os.path.join(cache_dir, dig.hex()+extn)
 
 def download_file(url):
   path = url_cache_path(url)
   tmp_file = path + ".tmp"
 
+  print("Downloading %r" % (url,))
+
   if os.path.exists(path):
+    print("  Local: %r (cached)" % (path,))
     return path
 
   f = open(tmp_file, "wb")
@@ -42,30 +64,33 @@ def download_file(url):
   f.close()
   os.rename(tmp_file, path)
 
+  print("  Local: %r (fetched)" % (path,))
   return path
 
 class link_handler(html.parser.HTMLParser):
-  def __init__(self, *args):
-    super().__init__(*args)
+  def __init__(self, tag, attr_name):
+    super().__init__()
+    self.__tag = tag
+    self.__attr_name = attr_name
     self.__links = []
 
   def __iter__(self):
     return iter(self.__links)
 
   def handle_starttag(self, tag, attrs):
-    if tag != 'a':
+    if tag != self.__tag:
       return
 
-    href = dict(attrs).get("href")
+    href = dict(attrs).get(self.__attr_name)
     if href == None:
       return
 
     self.__links.append(href)
 
-def iter_links(url):
+def iter_elems(url, tag, attr_name):
   path = download_file(url)
 
-  h = link_handler()
+  h = link_handler(tag, attr_name)
   f = open(path, "r")
   while True:
     data = f.read(chunk_size)
@@ -77,12 +102,50 @@ def iter_links(url):
   for link in h:
     yield link
 
-def process_list_page(n):
-  for link in iter_links("%s%d" % (killer_list_base, n)):
+def process_puzzle_page(url):
+  print("Puzzle page: %r" % (url,))
+
+  the_puzzle = None
+  for link in iter_elems(url, "img", "src"):
+    should_ignore = False
+    for r in image_ignore_re_list:
+      if r.fullmatch(link):
+        should_ignore = True
+    if should_ignore:
+      continue
+
+    is_puzzle = False
+    for r in puzzle_image_re_list:
+      if r.fullmatch(link):
+        is_puzzle = True
+    if not is_puzzle:
+      print("Unknown image on %r" % (url,))
+      print("  Image: %r" % (link,))
+      continue
+
+    if the_puzzle != None:
+      print("Duplicate puzzle found on %r" % (url,))
+      print("  Image: %r" % (the_puzzle,))
+      print("  Image: %r" % (link,))
+      break
+
+    the_puzzle = link
+
+  if the_puzzle == None:
+    print("No puzzle found on %r" % (url,))
+    return
+
+  download_file(the_puzzle)
+
+def process_list_page(n, count):
+  done = set()
+  url = "%s%d" % (killer_list_base, n)
+  for link in iter_elems(url, "a", "href"):
     if not link.startswith(site):
       continue
 
     suffix = link[len(site):]
+
     should_ignore = False
     for r in ignore_re_list:
       if r.fullmatch(suffix):
@@ -90,14 +153,27 @@ def process_list_page(n):
     if should_ignore:
       continue
 
-    print(link)
+    is_puzzle = False
+    for r in puzzle_page_re_list:
+      if r.fullmatch(suffix):
+        is_puzzle = True
+    if not is_puzzle:
+      print("Unknown link on list page: '%s'\n" % (link,))
+
+    if link in done:
+      continue
+    done.add(link)
+
+    if count > 0:
+      process_puzzle_page(link)
+      count -= 1
 
 def main():
   try:
     os.mkdir(cache_dir)
   except FileExistsError:
     pass
-  process_list_page(29)
+  process_list_page(29, 5)
 
 main()
 sys.exit(0)
