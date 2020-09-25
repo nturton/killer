@@ -1,0 +1,103 @@
+#! /usr/bin/python3
+import html.parser
+import os
+import os.path
+import sys
+import re
+import requests
+
+base_dir = os.path.dirname(sys.argv[0])
+
+special_char_re = re.compile(r'[^\w\.]+')
+
+site = "https://www.theguardian.com/lifeandstyle/"
+killer_list_base = site + "series/killer-sudoku+series/sudoku?page="
+ignore_re_list = (
+  re.compile(r'[-\w]+'),
+  re.compile(r'series/killer-sudoku\+series/sudoku\?page=\d+'),
+  re.compile(r'series/killer-sudoku\+series/sudoku'),
+)
+puzzle_page_re_0 = re.compile(r'\d+/\w+/\d+/observer-killer-sudoku')
+puzzle_page_re_1 = re.compile(r'\d+/\w+/\d+/sudoku-killer-\d+')
+
+cache_dir = os.path.join(base_dir, "cache")
+
+chunk_size = 4096
+
+def url_cache_path(url):
+  filename = special_char_re.sub("_", url)
+  return os.path.join(cache_dir, filename)
+
+def download_file(url):
+  path = url_cache_path(url)
+  tmp_file = path + ".tmp"
+
+  if os.path.exists(path):
+    return path
+
+  f = open(tmp_file, "wb")
+  r = requests.get(url, stream=True)
+  for data in r.iter_content(chunk_size=chunk_size):
+    f.write(data)
+  f.close()
+  os.rename(tmp_file, path)
+
+  return path
+
+class link_handler(html.parser.HTMLParser):
+  def __init__(self, *args):
+    super().__init__(*args)
+    self.__links = []
+
+  def __iter__(self):
+    return iter(self.__links)
+
+  def handle_starttag(self, tag, attrs):
+    if tag != 'a':
+      return
+
+    href = dict(attrs).get("href")
+    if href == None:
+      return
+
+    self.__links.append(href)
+
+def iter_links(url):
+  path = download_file(url)
+
+  h = link_handler()
+  f = open(path, "r")
+  while True:
+    data = f.read(chunk_size)
+    if len(data) == 0:
+      break
+    h.feed(data)
+  f.close()
+
+  for link in h:
+    yield link
+
+def process_list_page(n):
+  for link in iter_links("%s%d" % (killer_list_base, n)):
+    if not link.startswith(site):
+      continue
+
+    suffix = link[len(site):]
+    should_ignore = False
+    for r in ignore_re_list:
+      if r.fullmatch(suffix):
+        should_ignore = True
+    if should_ignore:
+      continue
+
+    print(link)
+
+def main():
+  try:
+    os.mkdir(cache_dir)
+  except FileExistsError:
+    pass
+  process_list_page(29)
+
+main()
+sys.exit(0)
