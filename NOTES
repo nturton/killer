@@ -1,0 +1,2 @@
+img2pdf cache/*.jp* --pagesize 9cmx9cm --border 5mm -o foo.pdf
+pdfnup --nup 2x3 --paper a4paper --no-landscape -o bar.pdf foo.pdf -
