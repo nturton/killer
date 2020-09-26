@@ -1,6 +1,7 @@
 #! /usr/bin/python3
 import hashlib
 import html.parser
+import json
 import os
 import os.path
 import sys
@@ -8,6 +9,8 @@ import re
 import requests
 
 base_dir = os.path.dirname(sys.argv[0])
+cache_dir = os.path.join(base_dir, "cache")
+index_path = os.path.join(cache_dir, "index.json")
 
 special_char_re = re.compile(r'[^\w\.]+')
 
@@ -33,9 +36,12 @@ puzzle_image_re_list = (
 )
 extn_re = re.compile(r'.*(\.\w+)(\?|\Z)')
 
-cache_dir = os.path.join(base_dir, "cache")
-
 chunk_size = 4096
+
+months = dict(x.split(" ",1) for x in (
+  "jan 1",  "feb 2",  "mar 3",  "apr 4",  "may 5",  "jun 6",
+  "jul 7",  "aug 8",  "sep 9",  "oct 10", "nov 11", "dec 12",
+))
 
 def url_cache_path(url):
   m = extn_re.match(url)
@@ -103,7 +109,7 @@ def iter_elems(url, tag, attr_name):
   for link in h:
     yield link
 
-def process_puzzle_page(info_set, url, puzzle_match):
+def process_puzzle_page(index, url, puzzle_match):
   print("Puzzle page: %r" % (url,))
 
   the_puzzle = None
@@ -139,11 +145,8 @@ def process_puzzle_page(info_set, url, puzzle_match):
     return
 
   image_path = download_file(the_puzzle)
-  date_str = puzzle_match.group(1).replace("/","-")
-  info = (date_str, image_path)
-  info_set.add(info)
 
-def process_list_page(info, n, count):
+def process_list_page(index, n, count):
   done = set()
   url = "%s%d" % (killer_list_base, n)
   for link in iter_elems(url, "a", "href"):
@@ -173,18 +176,36 @@ def process_list_page(info, n, count):
     done.add(link)
 
     if count > 0:
-      process_puzzle_page(info, link, puzzle_match)
+      date_str = puzzle_match.group(1).replace("/","-")
+      process_puzzle_page(index, link, date_str)
       count -= 1
+
+def load_index():
+  if os.path.exists(index_path):
+    f = open(index_path)
+    index = json.load(f)
+    f.close()
+  else:
+    index = {}
+  return index
+
+def save_index(index):
+  tmp_path = index_path + ".tmp"
+  f = open(tmp_path, "w")
+  json.dump(index, f)
+  f.close()
+  os.rename(tmp_path, index_path)
 
 def main():
   try:
     os.mkdir(cache_dir)
   except FileExistsError:
     pass
-  info_set = set()
-  process_list_page(info_set, 29, 5)
-  for info in sorted(info_set):
-    print(info)
+
+  index = load_index()
+  for n in range(24, 30):
+    process_list_page(index, n, 50)
+  save_index(index)
 
 main()
 sys.exit(0)
