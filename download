@@ -43,7 +43,7 @@ months = dict(x.split(" ",1) for x in (
   "jul 7",  "aug 8",  "sep 9",  "oct 10", "nov 11", "dec 12",
 ))
 
-def url_cache_path(url):
+def url_filename(url):
   m = extn_re.match(url)
   extn = ""
   if m:
@@ -52,13 +52,19 @@ def url_cache_path(url):
   h = hashlib.sha256()
   h.update(url.encode("UTF-8"))
   dig = h.digest()
-  return os.path.join(cache_dir, dig.hex()+extn)
+  return dig.hex()+extn
 
-def download_file(url):
-  path = url_cache_path(url)
+def download_file(index, url, descr):
+  filename = url_filename(url)
+  path = os.path.join(cache_dir, filename)
   tmp_file = path + ".tmp"
 
   print("Downloading %r" % (url,))
+
+  index[filename] = {
+    'descr': descr,
+    'url': url,
+  }
 
   if os.path.exists(path):
     print("  Local: %r (cached)" % (path,))
@@ -94,9 +100,7 @@ class link_handler(html.parser.HTMLParser):
 
     self.__links.append(href)
 
-def iter_elems(url, tag, attr_name):
-  path = download_file(url)
-
+def iter_elems(path, tag, attr_name):
   h = link_handler(tag, attr_name)
   f = open(path, "r")
   while True:
@@ -109,11 +113,12 @@ def iter_elems(url, tag, attr_name):
   for link in h:
     yield link
 
-def process_puzzle_page(index, url, puzzle_match):
+def process_puzzle_page(index, url, date_str):
   print("Puzzle page: %r" % (url,))
 
   the_puzzle = None
-  for link in iter_elems(url, "img", "src"):
+  path = download_file(index, url, "page "+date_str)
+  for link in iter_elems(path, "img", "src"):
     should_ignore = False
     for r in image_ignore_re_list:
       if r.fullmatch(link):
@@ -144,12 +149,13 @@ def process_puzzle_page(index, url, puzzle_match):
     print("No puzzle found on %r" % (url,))
     return
 
-  image_path = download_file(the_puzzle)
+  image_path = download_file(index, the_puzzle, "image "+date_str)
 
 def process_list_page(index, n, count):
   done = set()
   url = "%s%d" % (killer_list_base, n)
-  for link in iter_elems(url, "a", "href"):
+  path = download_file(index, url, "list %d" % n)
+  for link in iter_elems(path, "a", "href"):
     if not link.startswith(site):
       continue
 
@@ -192,7 +198,7 @@ def load_index():
 def save_index(index):
   tmp_path = index_path + ".tmp"
   f = open(tmp_path, "w")
-  json.dump(index, f)
+  json.dump(index, f, indent=2)
   f.close()
   os.rename(tmp_path, index_path)
 
