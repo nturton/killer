@@ -39,8 +39,8 @@ extn_re = re.compile(r'.*(\.\w+)(\?|\Z)')
 chunk_size = 4096
 
 months = dict(x.split(" ",1) for x in (
-  "jan 1",  "feb 2",  "mar 3",  "apr 4",  "may 5",  "jun 6",
-  "jul 7",  "aug 8",  "sep 9",  "oct 10", "nov 11", "dec 12",
+  "jan 01", "feb 02", "mar 03", "apr 04", "may 05", "jun 06",
+  "jul 07", "aug 08", "sep 09", "oct 10", "nov 11", "dec 12",
 ))
 
 def url_filename(url):
@@ -182,7 +182,10 @@ def process_list_page(index, n, count):
     done.add(link)
 
     if count > 0:
-      date_str = puzzle_match.group(1).replace("/","-")
+      date_list = puzzle_match.group(1).split("/")
+      date_str = "%s-%s-%s" % (date_list[0],
+                               months.get(date_list[1], date_list[1]),
+                               date_list[2])
       process_puzzle_page(index, link, date_str)
       count -= 1
 
