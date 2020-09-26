@@ -10,11 +10,16 @@ import sys
 base_dir = os.path.dirname(sys.argv[0])
 cache_dir = os.path.join(base_dir, "cache")
 index_path = os.path.join(cache_dir, "index.json")
-image_pdf = os.path.join(base_dir, "images.pdf")
+images_pdf = os.path.join(base_dir, "images.pdf")
+image_pages_pdf = os.path.join(base_dir, "image_pages.pdf")
+page_numbers_tex = os.path.join(base_dir, "page_numbers.tex")
 
 _descr = 'descr'
 _number = 'number'
 _image = 'image '
+
+n_cols = 2
+n_rows = 3
 
 class app(object):
   def __init__(self):
@@ -28,9 +33,6 @@ class app(object):
                    help='Set the images to include',)
     p.add_argument('-n', '--no-act', action='store_true',
                    help='Do not run any commands.')
-    p.add_argument('-o', '--output', action='store',
-                   default='killer.pdf',
-                   help='Set the output filename.')
     p.add_argument('-v', '--verbose', action='store_true',
                    help='Show the commands to run.')
     self.__args = p.parse_args()
@@ -64,24 +66,41 @@ class app(object):
           sys.exit(1)
 
         self.__filenames.append(filename)
-      
-  def gen_image_pdf(self):
-    args = [ "img2pdf", "--pagesize", "90mmx90mm",
-             "--border", "5mm", "-o", image_pdf ]
-    args.extend(os.path.join(cache_dir, x) for x in self.__filenames)
 
+  def report_command(self, args):
     if self.__args.verbose:
       print(" ".join(shlex.quote(x) for x in args))
 
+  def run_command(self, args):
+    self.report_command(args)
+
     if not self.__args.no_act:
-      subprocess.check_call(args)
+      subprocess.check_call(args, stdin=subprocess.DEVNULL)
+
+  def gen_images_pdf(self):
+    args = [ "img2pdf", "--pagesize", "90mmx90mm",
+             "--border", "6mm", "-o", images_pdf ]
+    args.extend(os.path.join(cache_dir, x) for x in self.__filenames)
+    self.run_command(args)
+
+  def gen_image_pages_pdf(self):
+    args = [ "pdfnup", "--nup", "%dx%d" % (n_cols, n_rows),
+             "--paper", "a4paper", "--no-landscape",
+             "-o", image_pages_pdf, images_pdf ]
+    self.run_command(args)
+
+  def gen_pdf(self):
+    args = [ "latex", "-output-format=pdf", page_numbers_tex, ]
+    self.run_command(args)
 
   def run(self):
     self.parse_args()
     self.load_index()
     self.scan_numbers()
     self.process_specs()
-    self.gen_image_pdf()
+    self.gen_images_pdf()
+    self.gen_image_pages_pdf()
+    self.gen_pdf()
 
 app().run()
 exit(0)
