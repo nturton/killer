@@ -1,0 +1,87 @@
+#! /usr/bin/python3
+import argparse
+import json
+import os
+import os.path
+import shlex
+import subprocess
+import sys
+
+base_dir = os.path.dirname(sys.argv[0])
+cache_dir = os.path.join(base_dir, "cache")
+index_path = os.path.join(cache_dir, "index.json")
+image_pdf = os.path.join(base_dir, "images.pdf")
+
+_descr = 'descr'
+_number = 'number'
+_image = 'image '
+
+class app(object):
+  def __init__(self):
+    self.__by_number = {}
+    self.__filenames = []
+
+  def parse_args(self):
+    p = argparse.ArgumentParser(
+      description="Generate a PDF of images.")
+    p.add_argument('image_spec', nargs='+',
+                   help='Set the images to include',)
+    p.add_argument('-n', '--no-act', action='store_true',
+                   help='Do not run any commands.')
+    p.add_argument('-o', '--output', action='store',
+                   default='killer.pdf',
+                   help='Set the output filename.')
+    p.add_argument('-v', '--verbose', action='store_true',
+                   help='Show the commands to run.')
+    self.__args = p.parse_args()
+
+    if self.__args.no_act:
+      self.__args.verbose = True
+
+  def load_index(self):
+    if os.path.exists(index_path):
+      f = open(index_path)
+      self.__index = json.load(f)
+      f.close()
+    else:
+      self.__index = {}
+
+  def scan_numbers(self):
+    for filename, info in self.__index.items():
+      n = info.get(_number)
+      if n != None:
+        assert(n not in self.__by_number)
+        self.__by_number[n] = filename
+
+  def process_specs(self):
+    for spec in self.__args.image_spec:
+      parts = tuple(map(int, spec.split('-', 1)))
+      for n in range(parts[0], parts[-1]+1):
+        filename = self.__by_number.get(n)
+        if filename == None:
+          sys.stderr.write("%s: Unknown image %d.\n" %
+                           (sys.argv[0], n))
+          sys.exit(1)
+
+        self.__filenames.append(filename)
+      
+  def gen_image_pdf(self):
+    args = [ "img2pdf", "--pagesize", "90mmx90mm",
+             "--border", "5mm", "-o", image_pdf ]
+    args.extend(os.path.join(cache_dir, x) for x in self.__filenames)
+
+    if self.__args.verbose:
+      print(" ".join(shlex.quote(x) for x in args))
+
+    if not self.__args.no_act:
+      subprocess.check_call(args)
+
+  def run(self):
+    self.parse_args()
+    self.load_index()
+    self.scan_numbers()
+    self.process_specs()
+    self.gen_image_pdf()
+
+app().run()
+exit(0)
