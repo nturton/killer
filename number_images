@@ -1,0 +1,124 @@
+#! /usr/bin/python3
+import argparse
+import json
+import os
+import os.path
+import sys
+
+base_dir = os.path.dirname(sys.argv[0])
+cache_dir = os.path.join(base_dir, "cache")
+index_path = os.path.join(cache_dir, "index.json")
+
+_descr = 'descr'
+_number = 'number'
+_image = 'image '
+
+initial = (
+  'fed894df69c5f4856d6a6ec8d27d1bc592203e6fc620991e80c3a35b1c8c6a06.jpeg',
+  '97375078b9dc7aa3dfa0c869431f34cbd497efcb6c3ba934cc267af432528396.jpeg',
+  '70960b771d00eb5d7bb8c74bdad34f9e2ec9ad8a5bf3b9ab9cf6fdacd900e344.jpeg',
+  'dc27f57db32df15ad6c73767dab6859cc7ae20f21766b820adbe5659cb825677.jpeg',
+  'c2d8309e3034e1221121bff5f445dddabe6fec0a11f45a6714b6cfd3619f9326.jpeg',
+  'e76be58fd6705f049517de2a5c6eaa59271a28e5743cbac9fea544bd8f583309.jpeg',
+  'e37aec364620d52ca11b371ba894b23a7c504e464c4c882c73ef54b49e2479e2.jpeg',
+  '0f1b038f9b446b6382cded75f9d2ceff44544b4c2e9dabf70320baf5264651b0.jpeg',
+  '1489c8b3fa4b1c5c4b113a091d82fda219f52d97b6f5422f4e6fc5de5cbb5ec9.jpeg',
+  '425fda46fba7c5d5467a7a1b16072bb919b01393d5ebaf28bba974266624aba2.jpeg',
+  'd8b0a524494809f9a5d0830e3a24ae56a3c42c988562b21fcb64726f1c6cb35d.jpeg',
+  '89d1047a933c7ee7ee4d82c366fdefb5501ccd2269b179a0c96e1cda3d7b8b9b.jpeg',
+)
+
+class app(object):
+  def __init__(self):
+    self.__by_number = {}
+    self.__by_name = {}
+    self.__next_number = 0
+
+  def parse_args(self):
+    p = argparse.ArgumentParser("Index the images in the cache.")
+    p.add_argument('-l', '--list', default=False,
+                   action='store_true',
+                   help='List the assignments',)
+    p.add_argument('-r', '--renumber', default=False,
+                   action='store_true',
+                   help='renumber the images',)
+    self.__args = p.parse_args()
+
+  def load_index(self):
+    if os.path.exists(index_path):
+      f = open(index_path)
+      self.__index = json.load(f)
+      f.close()
+    else:
+      self.__index = {}
+
+  def save_index(self):
+    tmp_path = index_path + ".tmp"
+    f = open(tmp_path, "w")
+    json.dump(self.__index, f, indent=2)
+    f.close()
+    os.rename(tmp_path, index_path)
+
+  def clear_numbers(self):
+    for info in self.__index.values():
+      if _number in info:
+        del info[_number]
+
+  def scan_numbers(self):
+    for filename, info in self.__index.items():
+      n = info.get(_number)
+      if n != None:
+        assert(n not in self.__by_number)
+        assert(filename not in self.__by_name)
+        self.__by_number[n] = filename
+        self.__by_name[filename] = n
+
+  def assign_image(self, filename):
+    if filename in self.__by_name:
+      return
+
+    info = self.__index.get(filename)
+    assert info != None
+    descr = info.get(_descr)
+    if descr == None:
+      return
+
+    if not descr.startswith(_image):
+      return
+
+    while True:
+      if self.__next_number not in self.__by_number:
+        self.__by_number[self.__next_number] = filename
+        self.__by_name[filename] = self.__next_number
+        info[_number] = self.__next_number
+        self.__next_number += 1
+        return
+
+      self.__next_number += 1
+
+  def assign_initial(self):
+    for filename in initial:
+      self.assign_image(filename)
+
+  def assign_numbers(self):
+    for filename in sorted(self.__index.keys()):
+      self.assign_image(filename)
+
+  def list_all(self):
+    for n, filename in sorted(self.__by_number.items()):
+      print("%4d %s" % (n, filename))
+
+  def run(self):
+    self.parse_args()
+    self.load_index()
+    if self.__args.renumber:
+      self.clear_numbers()
+    self.scan_numbers()
+    self.assign_initial()
+    self.assign_numbers()
+    if self.__args.list:
+      self.list_all()
+    self.save_index()
+
+app().run()
+exit(0)
