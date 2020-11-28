@@ -79,7 +79,7 @@ class app(object):
 
   def gen_images_pdf(self):
     args = [ "img2pdf", "--pagesize", "90mmx90mm",
-             "--border", "6mm", "-o", images_pdf ]
+             "--border", "3mm", "-o", images_pdf ]
     args.extend(os.path.join(cache_dir, x) for x in self.__filenames)
     self.run_command(args)
 
