@@ -7,12 +7,17 @@ import shlex
 import subprocess
 import sys
 
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import cm
+
 base_dir = os.path.dirname(sys.argv[0])
 cache_dir = os.path.join(base_dir, "cache")
 index_path = os.path.join(cache_dir, "index.json")
 images_pdf = os.path.join(base_dir, "images.pdf")
 image_pages_pdf = os.path.join(base_dir, "image_pages.pdf")
-page_numbers_tex = os.path.join(base_dir, "page_numbers.tex")
+numbers_pdf = os.path.join(base_dir, "numbers.pdf")
+killer_pdf = os.path.join(base_dir, "killer.pdf")
 
 _descr = 'descr'
 _number = 'number'
@@ -86,11 +91,24 @@ class app(object):
   def gen_image_pages_pdf(self):
     args = [ "pdfnup", "--nup", "%dx%d" % (n_cols, n_rows),
              "--paper", "a4paper", "--no-landscape",
+             "--scale", "0.98",
              "-o", image_pages_pdf, images_pdf ]
     self.run_command(args)
 
+  def gen_numbers_pdf(self):
+    images_per_page = n_cols * n_rows
+    num_images = len(self.__filenames)
+    num_pages = (num_images + images_per_page - 1) // images_per_page
+    c = canvas.Canvas(numbers_pdf)
+    for i in range(num_pages):
+      c.drawRightString(A4[0]-0.5*cm, 0.5*cm, str(i+1))
+      c.showPage()
+    c.save()
+
   def gen_pdf(self):
-    args = [ "latex", "-output-format=pdf", page_numbers_tex, ]
+    args = [ "pdftk", image_pages_pdf,
+             "multibackground", numbers_pdf,
+             "output", killer_pdf ]
     self.run_command(args)
 
   def run(self):
@@ -100,6 +118,7 @@ class app(object):
     self.process_specs()
     self.gen_images_pdf()
     self.gen_image_pages_pdf()
+    self.gen_numbers_pdf()
     self.gen_pdf()
 
 app().run()
